@@ -6,28 +6,30 @@ type SquareValue = 'X' | 'O' | null;
 type Squares = SquareValue[];
 
 type GameState = {
-  squares: Squares;
-  xIsNext: boolean;
+  currentMove: number;
   history: Squares[];
 }
 
+type BoardProps = {
+  xIsNext: boolean;
+  squares: Squares;
+  onPlay: 
+    (nextSquares: Squares) => void;
+}
+
 type GameActions = {
-  setSquares: (
-    next: Squares | ((prev: Squares) => Squares)
-  ) => void;
-  setXIsNext: (
-    next: boolean | ((prev: boolean) => boolean)
-  ) => void;
   setHistory: (
     next: Squares[] | ((prev: Squares[]) => Squares[])
   ) => void;
+  setCurrentMove: (
+    next: number | ((prev: number) => number) ) => void;
 }
 
 const useGameStore = create(
-  combine< GameState, GameActions>({ 
+  combine<GameState, GameActions>({ 
     history: [Array(9).fill(null) as Squares], 
-    squares: Array(9).fill(null) as Squares , 
-    xIsNext:  true }, 
+    currentMove: 0,
+  }, 
   (set) => {
     return {
       setHistory: (nextHistory) => {
@@ -38,22 +40,14 @@ const useGameStore = create(
             : nextHistory,
         }))
       },
-      setSquares: (nextSquares) => {
+      setCurrentMove: (nextCurrentMove) => {
         set((state) => ({
-          squares:
-          typeof nextSquares === 'function'
-          ? nextSquares(state.squares)
-          : nextSquares,
+          currentMove:
+            typeof nextCurrentMove === "function"
+            ? nextCurrentMove(state.currentMove)
+            : nextCurrentMove,
         }))
       },
-      setXIsNext: (nextXIsNext) => {
-        set((state) => ({
-          xIsNext:
-            typeof nextXIsNext === 'function'
-            ? nextXIsNext(state.xIsNext)
-            : nextXIsNext,
-        }))
-      }
     }
   }),
 )
@@ -90,23 +84,17 @@ const calculateStatus = (winner: SquareValue, turns: number, player: ('X' | 'O')
   return `Next player: ${player}`;
 }
 
-export default function Board() {
-  const { squares, xIsNext, setXIsNext, setSquares } = useGameStore();
+const Board = ({ xIsNext, squares, onPlay  }: BoardProps) => {
   const player = xIsNext ? 'X' : 'O';
   const winner = calculateWinner(squares);
   const turns = calculateTurns(squares);
   const status = calculateStatus(winner, turns, player);
 
-  const handleClick = (i: number) => {
+  const handleClick = (i: number): void => {
     if (squares[i] || winner) return;
     const nextSquares = squares.slice();
     nextSquares[i] = player;
-    setSquares(nextSquares);
-    setXIsNext(!xIsNext);
-  }
-
-  const clearBoard = () => {
-      setSquares(Array(9).fill(null));
+    onPlay(nextSquares);
   }
   
   return (
@@ -127,7 +115,62 @@ export default function Board() {
       ))
       } 
     </div>
-    <button onClick={clearBoard}>Clear Board</button>
     </>
+  )
+}
+
+export default function Game() {
+  const history = useGameStore((state) => state.history);
+  const setHistory = useGameStore((state) => state.setHistory);
+  const currentMove = useGameStore((state) => state.currentMove);
+  const setCurrentMove = useGameStore((state) => state.setCurrentMove);
+  const xIsNext = currentMove % 2 == 0;
+  const currentSquares = history[currentMove];
+
+  const handlePlay = (nextSquares: Squares): void => {
+      const nextHistory = history.slice(0, currentMove + 1).concat([nextSquares]);
+      setHistory(nextHistory)
+      setCurrentMove(nextHistory.length - 1);
+  }
+
+  const resetGame = (): void => {
+   setHistory([Array(9).fill(null)]);
+   setCurrentMove(0);
+  }
+
+  function jumpTo(nextMove: number): void {
+    setCurrentMove(nextMove)
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        fontFamily: 'monospace',
+      }}>
+        <div>
+          <Board xIsNext={xIsNext} squares={currentSquares} onPlay={handlePlay}/>
+        </div>
+        <div style={{ marginLeft: '1rem' }}>
+          <ol>{
+            history.map((_, historyIndex) => {
+              const description = 
+                historyIndex > 0
+                ? `Go to move #${historyIndex}`
+                : `Go to game start`
+
+                return (
+                  <li key={historyIndex}>
+                    <button onClick={() => jumpTo(historyIndex)}>
+                      {description}
+                    </button>
+                  </li>
+                )
+            })
+            }</ol>
+        </div>
+        <button onClick={resetGame}>Reset Game</button>
+    </div>
   )
 }
